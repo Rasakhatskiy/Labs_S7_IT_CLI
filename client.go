@@ -1,22 +1,31 @@
 package main
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
 )
 
-func connectToServer() (string, error) {
+func connectToServer() (DatabaseList, error) {
 	//resp, err := http.Get(fmt.Sprintf("http://%s:%s/databases", IP, PORT))
 	resp, err := http.Get("http://localhost:1323/databases")
 	if err != nil {
-		return "", err
+		return DatabaseList{}, err
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return DatabaseList{}, err
 	}
 	//Convert the body to type string
 	sb := string(body)
-	return sb, nil
+
+	var list DatabaseList
+
+	err = json.Unmarshal([]byte(sb), &list)
+	if err != nil {
+		return DatabaseList{}, err
+	}
+
+	return list, nil
 }
