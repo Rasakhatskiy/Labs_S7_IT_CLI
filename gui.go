@@ -52,24 +52,48 @@ func showDBList(list DatabaseList) {
 	var listForm *tview.List
 	listForm = tview.NewList()
 	for i, s := range list.Databases {
-		listForm.AddItem(s, "", rune('a'+i), nil)
+		listForm.AddItem(s, "", rune('a'+i), func() {
+			tableList, err := getTablesList(s)
+			if err != nil {
+				showErrorMessage(nil, nil, "Exit", "Cooler Exit", err.Error())
+			}
+			showTablesList(tableList)
+		})
 	}
 	listForm.AddItem("Back", "Press to exit", 'q', func() {
 		setConnectForm()
 	})
+
+	listForm.SetBorder(true).SetTitle(" Available databases ").SetTitleAlign(tview.AlignLeft)
 
 	if err := app.SetRoot(listForm, true).SetFocus(listForm).Run(); err != nil {
 		panic(err)
 	}
 }
 
+func showTablesList(list []string) {
+	
+}
+
 func setConnectForm() {
 	var form *tview.Form
 
+	ipField := tview.NewInputField()
+	ipField.SetLabel("IP")
+	ipField.SetText("localhost")
+	ipField.SetFieldWidth(16)
+
+	portField := tview.NewInputField()
+	portField.SetLabel("Port")
+	portField.SetText("1323")
+	portField.SetFieldWidth(8)
+
 	form = tview.NewForm().
-		AddInputField("IP", "localhost", 16, nil, func(text string) { IP = text }).
-		AddInputField("Port", "1323", 10, nil, func(text string) { PORT = text }).
+		AddFormItem(ipField).
+		AddFormItem(portField).
 		AddButton("Connect", func() {
+			IP = ipField.GetText()
+			PORT = portField.GetText()
 			dblist, err := connectToServer()
 			if err != nil {
 				showErrorMessage(form, nil, "OK", "Exit", err.Error())
