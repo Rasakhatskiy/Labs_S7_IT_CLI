@@ -10,4 +10,5 @@ func main() {
 	app = tview.NewApplication()
 
 	setConnectForm()
+	app.Stop()
 }

@@ -13,20 +13,26 @@ func getUrl() string {
 	return fmt.Sprintf("http://%s:%s", IP, PORT)
 }
 
-func connectToServer() (DatabaseList, error) {
-	url := getUrl()
-	url += "/databases"
+func getHttpResponse(url string) (string, error) {
 	resp, err := http.Get(url)
 	if err != nil {
-		return DatabaseList{}, err
+		return "", err
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return DatabaseList{}, err
+		return "", err
 	}
 	//Convert the body to type string
-	sb := string(body)
+
+	return string(body), nil
+}
+
+func connectToServer() (DatabaseList, error) {
+	sb, err := getHttpResponse(fmt.Sprintf("%s/databases", getUrl()))
+	if err != nil {
+		return DatabaseList{}, err
+	}
 
 	var list DatabaseList
 
@@ -39,18 +45,10 @@ func connectToServer() (DatabaseList, error) {
 }
 
 func getTablesList(dbname string) ([]string, error) {
-	url := getUrl() + "/databases/" + dbname
-	resp, err := http.Get(url)
+	sb, err := getHttpResponse(getUrl() + "/databases/" + dbname)
 	if err != nil {
 		return nil, err
 	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	sb := string(body)
 
 	var list []string
 
@@ -60,4 +58,20 @@ func getTablesList(dbname string) ([]string, error) {
 	}
 
 	return list, nil
+}
+
+func getTable(dbName, tableName string) (*TableJSON, error) {
+	url := fmt.Sprintf("%s/databases/%s/%s", getUrl(), dbName, tableName)
+	sb, err := getHttpResponse(url)
+	if err != nil {
+		return nil, err
+	}
+
+	var table TableJSON
+	err = json.Unmarshal([]byte(sb), &table)
+	if err != nil {
+		return nil, err
+	}
+
+	return &table, nil
 }
