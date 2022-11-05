@@ -1,6 +1,9 @@
 package main
 
 import (
+	"CLI_DBMS_viewer/database"
+	"CLI_DBMS_viewer/globvar"
+	"CLI_DBMS_viewer/utils"
 	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -31,7 +34,7 @@ func showErrorMessage(firstOptionForm, secondOptionForm *tview.Form, btnText1, b
 	app.SetRoot(modal, true)
 }
 
-func showInfoMessage(optionForm *tview.Form, message string) {
+func showInfoMessage(optionForm *tview.Flex, message string) {
 	modal := tview.NewModal().
 		SetText(message).
 		AddButtons([]string{"OK"}).
@@ -46,23 +49,40 @@ func showInfoMessage(optionForm *tview.Form, message string) {
 
 		})
 
-	app.SetRoot(modal, true)
+	app.SetRoot(modal, false)
+}
+
+func showYesNoMessage(message string, fYes, fNo func()) {
+	var modal *tview.Modal
+	modal = tview.NewModal().
+		SetText(message).
+		AddButtons([]string{"Yes", "No"}).
+		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			if buttonLabel == "Yes" {
+				fYes()
+			}
+			if buttonLabel == "No" {
+				fNo()
+			}
+		})
+	app.SetRoot(modal, false)
 }
 
 func showDBList(list DatabaseList) {
 	var listForm *tview.List
 	listForm = tview.NewList()
+
 	for i, s := range list.Databases {
-		listForm.AddItem(s, "", rune('a'+i), func() {
-			tableList, err := getTablesList(s)
-			if err != nil {
-				showErrorMessage(nil, nil, "Exit", "Cooler Exit", err.Error())
-			}
-			showTablesList(s, tableList)
-		})
+		listForm.AddItem(s, "", rune('a'+i), nil)
 	}
+
+	listForm.SetSelectedFunc(func(i int, s string, s2 string, r rune) {
+		globvar.DBname = s
+		showTablesList()
+	})
+
 	listForm.AddItem("Back", "Press to exit", 'q', func() {
-		setConnectForm()
+		showConnectForm()
 	})
 
 	listForm.SetBorder(true).SetTitle(" Available databases ").SetTitleAlign(tview.AlignLeft)
@@ -72,35 +92,40 @@ func showDBList(list DatabaseList) {
 	}
 }
 
-func showTablesList(dbname string, list []string) {
+func showTablesList() {
+	list, err := getTablesList(globvar.DBname)
+	if err != nil {
+		showErrorMessage(nil, nil, "Exit", "Cooler Exit", err.Error())
+	}
+
 	var listForm *tview.List
 	listForm = tview.NewList()
 	for i, s := range list {
 		listForm.AddItem(s, "", rune('a'+i), func() {
-			table, err := getTable(dbname, s)
+			table, err := getTable(globvar.DBname, s)
 			if err != nil {
 				showErrorMessage(nil, nil, "Exit", "Cooler Exit", err.Error())
 			}
-			showTable("", "", table)
+			showTableForm("", "", table)
 		})
 	}
-	listForm.AddItem("Back", "Press to exit", 'q', func() {
-		setConnectForm()
+	listForm.AddItem("Add new table", "", 'n', func() {
+		showCreateTableForm()
+	})
+	listForm.AddItem("Back", "", 'q', func() {
+		showConnectForm()
 	})
 
-	listForm.SetBorder(true).SetTitle(fmt.Sprintf(" Database %s ", dbname)).SetTitleAlign(tview.AlignLeft)
+	listForm.SetBorder(true).SetTitle(fmt.Sprintf(" Database %s ", globvar.DBname)).SetTitleAlign(tview.AlignLeft)
 
 	if err := app.SetRoot(listForm, true).SetFocus(listForm).Run(); err != nil {
 		panic(err)
 	}
 }
 
-func showTable(dbName, tableName string, tablet *TableJSON) {
+func showTableForm(dbName, tableName string, tablet *TableJSON) {
 	table := tview.NewTable().
 		SetBorders(true)
-
-	//cols, rows := len(tablet.Headers), len(tablet.Values[0])
-	//word := 0
 
 	for i, header := range tablet.Headers {
 		table.SetCell(0, i, tview.NewTableCell(header.Name).
@@ -120,24 +145,25 @@ func showTable(dbName, tableName string, tablet *TableJSON) {
 		}
 	}
 
-	table.Select(0, 0).SetFixed(1, 1).SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEscape {
-			app.Stop()
-		}
-		if key == tcell.KeyEnter {
-			table.SetSelectable(true, true)
-		}
-	}).SetSelectedFunc(func(row int, column int) {
-		table.GetCell(row, column).SetTextColor(tcell.ColorRed)
-		table.SetSelectable(false, false)
-	})
+	table.Select(0, 0).
+		SetSelectable(true, false).
+		SetFixed(1, 0).
+		SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyEscape {
+				showTablesList()
+			}
+		}).
+		SetSelectedFunc(func(row int, column int) {
+			//table.GetCell(row, column).SetTextColor(tcell.ColorRed)
+			//table.SetSelectable(false, false)
+		})
 
 	if err := app.SetRoot(table, true).SetFocus(table).Run(); err != nil {
 		panic(err)
 	}
 }
 
-func setConnectForm() {
+func showConnectForm() {
 	var form *tview.Form
 
 	ipField := tview.NewInputField()
@@ -171,5 +197,91 @@ func setConnectForm() {
 
 	if err := app.SetRoot(form, true).SetFocus(form).Run(); err != nil {
 		panic(err)
+	}
+}
+
+func showCreateTableForm() {
+	var rowFlex *tview.Flex
+	var mainFlex *tview.Flex
+	var mainForm *tview.Form
+	var columnForm *tview.Form
+	var columnList *tview.List
+
+	columnList = tview.NewList()
+
+	columnList.SetBorder(true)
+	columnList.SetTitle("Columns")
+	columnList.SetSelectedFunc(func(i int, s string, s2 string, r rune) {
+		globvar.Headers = utils.RemoveIndex(globvar.Headers, i)
+		globvar.Types = utils.RemoveIndex(globvar.Types, i)
+		setList(columnList)
+		app.SetFocus(columnForm)
+	})
+
+	rowFlex = tview.NewFlex().SetDirection(tview.FlexRow)
+
+	textBoxColName := tview.NewInputField()
+	textBoxColName.SetTitle("Column name")
+	textBoxColName.SetFieldWidth(32)
+
+	dropDown := tview.NewDropDown()
+	dropDown.SetTitle("Column type")
+	dropDown.SetOptions(database.TypesListStr, nil)
+
+	columnForm = tview.NewForm().
+		AddFormItem(textBoxColName).
+		AddFormItem(dropDown).
+		AddButton("Add column", func() {
+			colName := textBoxColName.GetText()
+			_, colType := dropDown.GetCurrentOption()
+			globvar.Headers = append(globvar.Headers, colName)
+			globvar.Types = append(globvar.Types, colType)
+			setList(columnList)
+		}).
+		AddButton("<- Back", func() {
+			app.SetFocus(mainForm)
+		}).
+		AddButton("Remove column ->", func() {
+			app.SetFocus(columnList)
+		})
+	columnForm.SetBorder(true)
+
+	mainForm = tview.NewForm().
+		AddInputField("Table name", "", 32, nil, nil).
+		AddButton("Save", func() {
+			err := sendCreatedDB()
+
+			if err == nil {
+				//showInfoMessage(mainFlex, "Table created successfully")
+				showTablesList()
+			} else {
+				showInfoMessage(mainFlex, "хуйня: "+err.Error())
+			}
+
+		}).
+		AddButton("Cancel", func() {
+		}).
+		AddButton("to create columns ->", func() {
+			app.SetFocus(columnForm)
+		})
+	mainForm.SetBorder(true)
+
+	rowFlex.
+		AddItem(mainForm, 0, 1, true).
+		AddItem(columnForm, 0, 1, true)
+
+	mainFlex = tview.NewFlex().
+		AddItem(rowFlex, 0, 2, false).
+		AddItem(columnList, 0, 2, false)
+
+	if err := app.SetRoot(mainFlex, true).SetFocus(mainForm).Run(); err != nil {
+		panic(err)
+	}
+}
+
+func setList(columnList *tview.List) {
+	columnList.Clear()
+	for i, name := range globvar.Headers {
+		columnList.AddItem(name, globvar.Types[i], rune('0'+i), nil)
 	}
 }
