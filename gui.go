@@ -9,21 +9,22 @@ import (
 	"github.com/rivo/tview"
 )
 
-func showErrorMessage(firstOptionForm, secondOptionForm *tview.Form, btnText1, btnText2, message string) {
+func showErrorMessage(firstOptionForm, secondOptionForm *tview.Flex, btnText1, btnText2, message string) {
+	flex := tview.NewFlex()
 	modal := tview.NewModal().
 		SetText(message).
 		AddButtons([]string{btnText1, btnText2}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			if buttonLabel == btnText1 {
 				if firstOptionForm != nil {
-					app.SetRoot(firstOptionForm, true)
+					focusOnFlex(firstOptionForm)
 				} else {
 					app.Stop()
 				}
 			}
 			if buttonLabel == btnText2 {
 				if secondOptionForm != nil {
-					app.SetRoot(secondOptionForm, true)
+					focusOnFlex(secondOptionForm)
 				} else {
 					app.Stop()
 				}
@@ -31,7 +32,9 @@ func showErrorMessage(firstOptionForm, secondOptionForm *tview.Form, btnText1, b
 		}).
 		SetBackgroundColor(tcell.ColorRed)
 
-	app.SetRoot(modal, true)
+	flex.AddItem(modal, 0, 1, true)
+
+	focusOnFlex(flex)
 }
 
 func showInfoMessage(optionForm *tview.Flex, message string) {
@@ -68,102 +71,24 @@ func showYesNoMessage(message string, fYes, fNo func()) {
 	app.SetRoot(modal, false)
 }
 
-func showDBList(list DatabaseList) {
-	var listForm *tview.List
-	listForm = tview.NewList()
-
-	for i, s := range list.Databases {
-		listForm.AddItem(s, "", rune('a'+i), nil)
-	}
-
-	listForm.SetSelectedFunc(func(i int, s string, s2 string, r rune) {
-		globvar.DBname = s
-		showTablesList()
-	})
-
-	listForm.AddItem("Back", "Press to exit", 'q', func() {
-		showConnectForm()
-	})
-
-	listForm.SetBorder(true).SetTitle(" Available databases ").SetTitleAlign(tview.AlignLeft)
-
-	if err := app.SetRoot(listForm, true).SetFocus(listForm).Run(); err != nil {
+func focusOnFlex(flex *tview.Flex) {
+	if err := app.SetRoot(flex, true).SetFocus(flex).Run(); err != nil {
 		panic(err)
 	}
 }
 
-func showTablesList() {
-	list, err := getTablesList(globvar.DBname)
+func prepareDBList() {
+	dblist, err := connectToServer()
 	if err != nil {
-		showErrorMessage(nil, nil, "Exit", "Cooler Exit", err.Error())
-	}
-
-	var listForm *tview.List
-	listForm = tview.NewList()
-	for i, s := range list {
-		listForm.AddItem(s, "", rune('a'+i), func() {
-			table, err := getTable(globvar.DBname, s)
-			if err != nil {
-				showErrorMessage(nil, nil, "Exit", "Cooler Exit", err.Error())
-			}
-			showTableForm("", "", table)
-		})
-	}
-	listForm.AddItem("Add new table", "", 'n', func() {
-		showCreateTableForm()
-	})
-	listForm.AddItem("Back", "", 'q', func() {
-		showConnectForm()
-	})
-
-	listForm.SetBorder(true).SetTitle(fmt.Sprintf(" Database %s ", globvar.DBname)).SetTitleAlign(tview.AlignLeft)
-
-	if err := app.SetRoot(listForm, true).SetFocus(listForm).Run(); err != nil {
-		panic(err)
+		app.Stop()
+		showErrorMessage(getConnectForm(), nil, "OK", "Exit", err.Error())
+	} else {
+		focusOnFlex(getDBListForm(dblist))
 	}
 }
 
-func showTableForm(dbName, tableName string, tablet *TableJSON) {
-	table := tview.NewTable().
-		SetBorders(true)
-
-	for i, header := range tablet.Headers {
-		table.SetCell(0, i, tview.NewTableCell(header.Name).
-			SetTextColor(tcell.ColorYellow).
-			SetAlign(tview.AlignCenter))
-
-		table.SetCell(1, i, tview.NewTableCell(header.Type).
-			SetTextColor(tcell.ColorBlue).
-			SetAlign(tview.AlignCenter))
-	}
-
-	for i, row := range tablet.Values {
-		for j, data := range row {
-			table.SetCell(i+2, j, tview.NewTableCell(fmt.Sprintf("%v", data)).
-				SetTextColor(tcell.ColorWhite).
-				SetAlign(tview.AlignCenter))
-		}
-	}
-
-	table.Select(0, 0).
-		SetSelectable(true, false).
-		SetFixed(1, 0).
-		SetDoneFunc(func(key tcell.Key) {
-			if key == tcell.KeyEscape {
-				showTablesList()
-			}
-		}).
-		SetSelectedFunc(func(row int, column int) {
-			//table.GetCell(row, column).SetTextColor(tcell.ColorRed)
-			//table.SetSelectable(false, false)
-		})
-
-	if err := app.SetRoot(table, true).SetFocus(table).Run(); err != nil {
-		panic(err)
-	}
-}
-
-func showConnectForm() {
+func getConnectForm() *tview.Flex {
+	flex := tview.NewFlex()
 	var form *tview.Form
 
 	ipField := tview.NewInputField()
@@ -182,12 +107,7 @@ func showConnectForm() {
 		AddButton("Connect", func() {
 			IP = ipField.GetText()
 			PORT = portField.GetText()
-			dblist, err := connectToServer()
-			if err != nil {
-				showErrorMessage(form, nil, "OK", "Exit", err.Error())
-			} else {
-				showDBList(dblist)
-			}
+			prepareDBList()
 		}).
 		AddButton("Quit", func() {
 			app.Stop()
@@ -195,14 +115,123 @@ func showConnectForm() {
 
 	form.SetBorder(true).SetTitle("Connect to server").SetTitleAlign(tview.AlignLeft)
 
-	if err := app.SetRoot(form, true).SetFocus(form).Run(); err != nil {
-		panic(err)
+	flex.AddItem(form, 0, 1, true)
+
+	return flex
+}
+
+func getDBListForm(list []DBPathJSON) *tview.Flex {
+	flex := tview.NewFlex()
+	var listForm *tview.List
+	listForm = tview.NewList()
+
+	for i, s := range list {
+		listForm.AddItem(s.Name, "", rune('0'+i), nil)
+	}
+
+	listForm.SetSelectedFunc(func(i int, s string, s2 string, r rune) {
+		globvar.DBname = s
+		focusOnFlex(getTablesListForm())
+	})
+
+	listForm.AddItem("Create database", "new file", 'n', func() {
+		focusOnFlex(getCreateDBForm())
+	})
+
+	listForm.AddItem("Back", "Press to exit", 'q', func() {
+		focusOnFlex(getConnectForm())
+	})
+	listForm.SetBorder(true).SetTitle(" Available databases ").SetTitleAlign(tview.AlignLeft)
+
+	flex.AddItem(listForm, 0, 1, true)
+	return flex
+}
+
+func getTablesListForm() *tview.Flex {
+	flex := tview.NewFlex()
+
+	list, err := getTablesList(globvar.DBname)
+	if err != nil {
+		showErrorMessage(nil, nil, "Exit", "Cooler Exit", err.Error())
+		return nil
+	}
+
+	var listForm *tview.List
+	listForm = tview.NewList()
+	listForm.SetSelectedFunc(func(i int, s string, s2 string, r rune) {
+		tableJSON, err := getTable(globvar.DBname, s)
+		if err != nil {
+			showErrorMessage(flex, nil, "Ok", ":(", err.Error())
+		}
+		focusOnFlex(getTableForm(tableJSON))
+	})
+
+	for i, s := range list {
+		listForm.AddItem(s, "", rune('a'+i), nil)
+	}
+	listForm.AddItem("Add new table", "", 'n', func() {
+		focusOnFlex(getCreateTableForm())
+	})
+	listForm.AddItem("Back", "", 'q', func() {
+		prepareDBList()
+	})
+
+	listForm.SetBorder(true).SetTitle(fmt.Sprintf(" Database %s ", globvar.DBname)).SetTitleAlign(tview.AlignLeft)
+
+	flex.AddItem(listForm, 0, 1, true)
+	return flex
+}
+
+func getTableForm(tableJSON *TableJSON) *tview.Flex {
+	flex := tview.NewFlex()
+	table := tview.NewTable().
+		SetBorders(true)
+
+	for i, header := range tableJSON.Headers {
+		table.SetCell(0, i, tview.NewTableCell(header.Name).
+			SetTextColor(tcell.ColorYellow).
+			SetAlign(tview.AlignCenter))
+
+		table.SetCell(1, i, tview.NewTableCell(header.Type).
+			SetTextColor(tcell.ColorBlue).
+			SetAlign(tview.AlignCenter))
+	}
+
+	for i, row := range tableJSON.Values {
+		for j, data := range row {
+			table.SetCell(i+2, j, tview.NewTableCell(fmt.Sprintf("%v", data)).
+				SetTextColor(tcell.ColorWhite).
+				SetAlign(tview.AlignCenter))
+		}
+	}
+
+	table.Select(0, 0).
+		SetSelectable(true, false).
+		SetFixed(1, 0).
+		SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyEscape {
+				focusOnFlex(getTablesListForm())
+			}
+		}).
+		SetSelectedFunc(func(row int, column int) {
+			//table.GetCell(row, column).SetTextColor(tcell.ColorRed)
+			//table.SetSelectable(false, false)
+		})
+
+	flex.AddItem(table, 0, 1, true)
+	return flex
+}
+
+func setList(columnList *tview.List) {
+	columnList.Clear()
+	for i, name := range globvar.Headers {
+		columnList.AddItem(name, globvar.Types[i], rune('0'+i), nil)
 	}
 }
 
-func showCreateTableForm() {
+func getCreateTableForm() *tview.Flex {
 	var rowFlex *tview.Flex
-	var mainFlex *tview.Flex
+	var flex *tview.Flex
 	var mainForm *tview.Form
 	var columnForm *tview.Form
 	var columnList *tview.List
@@ -221,11 +250,11 @@ func showCreateTableForm() {
 	rowFlex = tview.NewFlex().SetDirection(tview.FlexRow)
 
 	textBoxColName := tview.NewInputField()
-	textBoxColName.SetTitle("Column name")
+	textBoxColName.SetLabel("Column name")
 	textBoxColName.SetFieldWidth(32)
 
 	dropDown := tview.NewDropDown()
-	dropDown.SetTitle("Column type")
+	dropDown.SetLabel("Column type")
 	dropDown.SetOptions(database.TypesListStr, nil)
 
 	columnForm = tview.NewForm().
@@ -234,8 +263,13 @@ func showCreateTableForm() {
 		AddButton("Add column", func() {
 			colName := textBoxColName.GetText()
 			_, colType := dropDown.GetCurrentOption()
+
 			globvar.Headers = append(globvar.Headers, colName)
 			globvar.Types = append(globvar.Types, colType)
+
+			textBoxColName.SetText("")
+			dropDown.SetOptions(database.TypesListStr, nil)
+
 			setList(columnList)
 		}).
 		AddButton("<- Back", func() {
@@ -246,42 +280,68 @@ func showCreateTableForm() {
 		})
 	columnForm.SetBorder(true)
 
+	tableNameInput := tview.NewInputField().
+		SetLabel("Table name").
+		SetFieldWidth(32)
+
 	mainForm = tview.NewForm().
-		AddInputField("Table name", "", 32, nil, nil).
+		AddFormItem(tableNameInput).
+		AddButton("to create columns ->", func() {
+			app.SetFocus(columnForm)
+		}).
 		AddButton("Save", func() {
-			err := sendCreatedDB()
+			globvar.TableName = tableNameInput.GetText()
+
+			err := postTablePrep()
 
 			if err == nil {
-				//showInfoMessage(mainFlex, "Table created successfully")
-				showTablesList()
+				showInfoMessage(getTablesListForm(), "Table created successfully")
 			} else {
-				showInfoMessage(mainFlex, "хуйня: "+err.Error())
+				showInfoMessage(flex, "error: "+err.Error())
 			}
 
 		}).
 		AddButton("Cancel", func() {
-		}).
-		AddButton("to create columns ->", func() {
-			app.SetFocus(columnForm)
+			focusOnFlex(getTablesListForm())
 		})
 	mainForm.SetBorder(true)
 
 	rowFlex.
 		AddItem(mainForm, 0, 1, true).
-		AddItem(columnForm, 0, 1, true)
+		AddItem(columnForm, 0, 1, false)
 
-	mainFlex = tview.NewFlex().
-		AddItem(rowFlex, 0, 2, false).
+	flex = tview.NewFlex().
+		AddItem(rowFlex, 0, 2, true).
 		AddItem(columnList, 0, 2, false)
 
-	if err := app.SetRoot(mainFlex, true).SetFocus(mainForm).Run(); err != nil {
-		panic(err)
-	}
+	return flex
 }
 
-func setList(columnList *tview.List) {
-	columnList.Clear()
-	for i, name := range globvar.Headers {
-		columnList.AddItem(name, globvar.Types[i], rune('0'+i), nil)
-	}
+func getCreateDBForm() *tview.Flex {
+	flex := tview.NewFlex()
+
+	nameInput := tview.NewInputField()
+	nameInput.SetLabel("DB name")
+	nameInput.SetFieldWidth(16)
+
+	form := tview.NewForm().
+		AddFormItem(nameInput).
+		AddButton("OK", func() {
+			err := postCreateDB(nameInput.GetText())
+			if err != nil {
+				showErrorMessage(flex, flex, "OK", "OK", err.Error())
+			}
+			prepareDBList()
+		}).
+		AddButton("Cancel", func() {
+			prepareDBList()
+		})
+
+	form.
+		SetBorder(true).
+		SetTitle("Create DB")
+
+	flex.AddItem(form, 0, 1, true)
+
+	return flex
 }

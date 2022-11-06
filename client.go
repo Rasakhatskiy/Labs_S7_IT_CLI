@@ -31,17 +31,17 @@ func getHttpResponse(url string) (string, error) {
 	return string(body), nil
 }
 
-func connectToServer() (DatabaseList, error) {
+func connectToServer() ([]DBPathJSON, error) {
 	sb, err := getHttpResponse(fmt.Sprintf("%s/databases", getUrl()))
 	if err != nil {
-		return DatabaseList{}, err
+		return []DBPathJSON{}, err
 	}
 
-	var list DatabaseList
+	var list []DBPathJSON
 
 	err = json.Unmarshal([]byte(sb), &list)
 	if err != nil {
-		return DatabaseList{}, err
+		return []DBPathJSON{}, err
 	}
 
 	return list, nil
@@ -79,7 +79,7 @@ func getTable(dbName, tableName string) (*TableJSON, error) {
 	return &table, nil
 }
 
-func sendCreatedDB() error {
+func postTablePrep() error {
 	if len(globvar.Headers) != len(globvar.Types) {
 		return errors.New("fatal: len of headers != len of types")
 	}
@@ -97,11 +97,12 @@ func sendCreatedDB() error {
 	}
 
 	tableJSON := TableJSON{
+		Name:    globvar.TableName,
 		Headers: headersJSON,
 		Values:  nil,
 	}
 
-	err := postTable("", &tableJSON)
+	err := postTable(globvar.DBname, &tableJSON)
 	if err != nil {
 		return err
 	}
@@ -128,5 +129,22 @@ func postTable(dbName string, tableJSON *TableJSON) error {
 	}
 
 	fmt.Println(res["json"])
+	return nil
+}
+
+func postCreateDB(name string) error {
+	url := fmt.Sprintf("%s/databases/new_database", getUrl())
+	data, err := json.Marshal(name)
+	if err != nil {
+		return err
+	}
+	_, err = http.Post(url, "application/json", bytes.NewBuffer(data))
+
+	//err = json.NewDecoder(resp.Body).Decode(&resp)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//fmt.Println(resp)
 	return nil
 }

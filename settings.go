@@ -3,8 +3,8 @@ package main
 var IP string
 var PORT string
 
-type DatabaseList struct {
-	Databases []string `json:"databases"`
+type DBPathJSON struct {
+	Name string `json:"name"`
 }
 
 type TableHeaderJSON struct {

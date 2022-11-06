@@ -1,5 +1,8 @@
 package globvar
 
-var Headers []string
-var Types []string
-var DBname string
+var (
+	Headers   []string
+	Types     []string
+	TableName string
+	DBname    string
+)

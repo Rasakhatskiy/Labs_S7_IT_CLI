@@ -22,6 +22,6 @@ func main() {
 	initTypes()
 	app = tview.NewApplication()
 
-	showConnectForm()
+	focusOnFlex(getConnectForm())
 	app.Stop()
 }
