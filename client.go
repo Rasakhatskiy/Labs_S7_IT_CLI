@@ -148,3 +148,62 @@ func postCreateDB(name string) error {
 	//fmt.Println(resp)
 	return nil
 }
+
+func makeHttpRequest(requestType, url string, data []byte) (string, error) {
+	var resp *http.Response
+	var err error
+
+	switch requestType {
+	case globvar.REQ_GET:
+		resp, err = http.Get(url)
+		break
+	case globvar.REQ_POST:
+		resp, err = http.Post(url, "application/json", bytes.NewBuffer(data))
+		break
+	case globvar.REQ_DELETE:
+		//todo delete
+		break
+	}
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// Read Response Body
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+		return "", errors.New(string(respBody))
+	}
+
+	return string(respBody), nil
+}
+
+func postNewRow(dbname, tableName string, values []string) error {
+	url := fmt.Sprintf("%s/databases/%s/%s/new_row", getUrl(), dbname, tableName)
+	data, err := json.Marshal(values)
+	if err != nil {
+		return err
+	}
+
+	err = makeHttpRequest(url, data)
+
+	// Display Results
+	//fmt.Println("response Status : ", resp.Status)
+	//fmt.Println("response Headers : ", resp.Header)
+	//fmt.Println("response Body : ", string(respBody))
+
+	return nil
+}
+
+func postEditRow(dbname, tableName string, values []string) error {
+
+	return nil
+}
+
+func deleteRow(dbname, tableName string, data []interface{}) error {
+	return nil
+}

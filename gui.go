@@ -158,11 +158,12 @@ func getTablesListForm() *tview.Flex {
 
 	var listForm *tview.List
 	listForm = tview.NewList()
-	listForm.SetSelectedFunc(func(i int, s string, s2 string, r rune) {
-		tableJSON, err := getTable(globvar.DBname, s)
+	listForm.SetSelectedFunc(func(i int, tableName string, s2 string, r rune) {
+		tableJSON, err := getTable(globvar.DBname, tableName)
 		if err != nil {
 			showErrorMessage(flex, nil, "Ok", ":(", err.Error())
 		}
+		globvar.TableName = tableName
 		focusOnFlex(getTableForm(tableJSON))
 	})
 
@@ -182,11 +183,8 @@ func getTablesListForm() *tview.Flex {
 	return flex
 }
 
-func getTableForm(tableJSON *TableJSON) *tview.Flex {
-	flex := tview.NewFlex()
-	table := tview.NewTable().
-		SetBorders(true)
-
+func setTableValues(table *tview.Table, tableJSON *TableJSON) {
+	table.Clear()
 	for i, header := range tableJSON.Headers {
 		table.SetCell(0, i, tview.NewTableCell(header.Name).
 			SetTextColor(tcell.ColorYellow).
@@ -204,21 +202,137 @@ func getTableForm(tableJSON *TableJSON) *tview.Flex {
 				SetAlign(tview.AlignCenter))
 		}
 	}
+}
+
+func getTableForm(tableJSON *TableJSON) *tview.Flex {
+	var (
+		table       = tview.NewTable()
+		listOptions = tview.NewList()
+		addEditForm = tview.NewForm()
+		flex        = tview.NewFlex()
+		inputs      []*tview.InputField
+	)
+
+	addEditForm.SetBorder(true)
+	addEditForm.AddButton("Save", func() {
+		var values []string
+		for _, input := range inputs {
+			if len(input.GetText()) == 0 {
+				app.SetFocus(input)
+				return
+			}
+			values = append(values, input.GetText())
+		}
+
+		var err error = nil
+		if globvar.TableOperationType == globvar.Create {
+			err = postNewRow(globvar.DBname, globvar.TableName, values)
+		}
+		if globvar.TableOperationType == globvar.Update {
+			err = postEditRow(globvar.DBname, globvar.TableName, values)
+		}
+		if err != nil {
+			showErrorMessage(flex, nil, "OK", "Exit", err.Error())
+		} else {
+			tableJSON, err = getTable(globvar.DBname, globvar.TableName)
+			if err != nil {
+				showErrorMessage(flex, nil, "OK", "Exit", err.Error())
+				setTableValues(table, tableJSON)
+			}
+		}
+	})
+	addEditForm.AddButton("Cancel", func() {
+		app.SetFocus(listOptions)
+	})
+
+	// set input fields for edit
+	for _, header := range tableJSON.Headers {
+		input := tview.NewInputField().
+			SetLabel(header.Name)
+
+		inputs = append(inputs, input)
+		if header.Type == database.TypeStringRangeTS {
+			input2 := tview.NewInputField().
+				SetLabel(header.Name + " 2")
+			inputs = append(inputs, input2)
+		}
+	}
+
+	listOptions.
+		AddItem("Navigate", "", 'n', func() {
+			globvar.TableOperationType = globvar.Read
+			app.SetFocus(table)
+		}).
+		AddItem("Add row", "", 'a', func() {
+			globvar.TableOperationType = globvar.Create
+			addEditForm.Clear(false)
+			for i := range inputs {
+				addEditForm.AddFormItem(inputs[i])
+				app.SetFocus(addEditForm)
+			}
+		}).
+		AddItem("Edit row", "", 'e', func() {
+			globvar.TableOperationType = globvar.Update
+			app.SetFocus(table)
+		}).
+		AddItem("Delete row", "", 'd', func() {
+			globvar.TableOperationType = globvar.Delete
+			app.SetFocus(table)
+		}).
+		AddItem("Back", "", 'b', func() {
+			focusOnFlex(getTablesListForm())
+		})
+
+	listOptions.SetBorder(true)
+
+	setTableValues(table, tableJSON)
 
 	table.Select(0, 0).
 		SetSelectable(true, false).
 		SetFixed(1, 0).
+
+		// ESCAPE
 		SetDoneFunc(func(key tcell.Key) {
 			if key == tcell.KeyEscape {
-				focusOnFlex(getTablesListForm())
+				app.SetFocus(listOptions)
 			}
 		}).
+
+		// ENTER
 		SetSelectedFunc(func(row int, column int) {
+			if row < 2 {
+				return
+			}
+			switch globvar.TableOperationType {
+			case globvar.Read:
+				break
+			case globvar.Update:
+				offset := 0
+				for i, data := range tableJSON.Values[row-2] {
+					inputs[i+offset].SetText(fmt.Sprintf("%v", data))
+					if tableJSON.Headers[i].Type == database.TypeStringRangeTS {
+						offset++
+						//todo string range
+					}
+				}
+				app.SetFocus(addEditForm)
+				break
+			case globvar.Delete:
+
+				break
+			}
+
 			//table.GetCell(row, column).SetTextColor(tcell.ColorRed)
 			//table.SetSelectable(false, false)
 		})
+	table.SetBorders(true)
 
-	flex.AddItem(table, 0, 1, true)
+	rowFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	rowFlex.AddItem(listOptions, 0, 1, true)
+	rowFlex.AddItem(addEditForm, 0, 3, true)
+
+	flex.AddItem(rowFlex, 0, 1, true)
+	flex.AddItem(table, 0, 3, true)
 	return flex
 }
 
