@@ -16,29 +16,47 @@ func getUrl() string {
 	return fmt.Sprintf("http://%s:%s", IP, PORT)
 }
 
-func getHttpResponse(url string) (string, error) {
-	resp, err := http.Get(url)
+func makeHttpRequest(requestType, url string, data []byte) (string, error) {
+	var resp *http.Response
+	var err error
+
+	switch requestType {
+	case globvar.REQ_GET:
+		resp, err = http.Get(url)
+		break
+	case globvar.REQ_POST:
+		resp, err = http.Post(url, "application/json", bytes.NewBuffer(data))
+		break
+	case globvar.REQ_DELETE:
+		//todo delete
+		break
+	}
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// Read Response Body
+	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+		return "", errors.New(string(respBody))
 	}
-	//Convert the body to type string
 
-	return string(body), nil
+	return string(respBody), nil
 }
 
 func connectToServer() ([]DBPathJSON, error) {
-	sb, err := getHttpResponse(fmt.Sprintf("%s/databases", getUrl()))
+	url := fmt.Sprintf("%s/databases", getUrl())
+	sb, err := makeHttpRequest(globvar.REQ_GET, url, nil)
 	if err != nil {
 		return []DBPathJSON{}, err
 	}
 
 	var list []DBPathJSON
-
 	err = json.Unmarshal([]byte(sb), &list)
 	if err != nil {
 		return []DBPathJSON{}, err
@@ -48,13 +66,13 @@ func connectToServer() ([]DBPathJSON, error) {
 }
 
 func getTablesList(dbname string) ([]string, error) {
-	sb, err := getHttpResponse(getUrl() + "/databases/" + dbname)
+	url := fmt.Sprintf("%s/databases/%s", getUrl(), dbname)
+	sb, err := makeHttpRequest(globvar.REQ_GET, url, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	var list []string
-
 	err = json.Unmarshal([]byte(sb), &list)
 	if err != nil {
 		return nil, err
@@ -65,7 +83,7 @@ func getTablesList(dbname string) ([]string, error) {
 
 func getTable(dbName, tableName string) (*TableJSON, error) {
 	url := fmt.Sprintf("%s/databases/%s/%s", getUrl(), dbName, tableName)
-	sb, err := getHttpResponse(url)
+	sb, err := makeHttpRequest(globvar.REQ_GET, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -116,19 +134,12 @@ func postTable(dbName string, tableJSON *TableJSON) error {
 	if err != nil {
 		return err
 	}
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 
+	_, err = makeHttpRequest(globvar.REQ_POST, url, data)
 	if err != nil {
 		return err
 	}
 
-	var res map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&res)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(res["json"])
 	return nil
 }
 
@@ -138,48 +149,13 @@ func postCreateDB(name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = http.Post(url, "application/json", bytes.NewBuffer(data))
 
-	//err = json.NewDecoder(resp.Body).Decode(&resp)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//fmt.Println(resp)
+	_, err = makeHttpRequest(globvar.REQ_POST, url, data)
+	if err != nil {
+		return err
+	}
+
 	return nil
-}
-
-func makeHttpRequest(requestType, url string, data []byte) (string, error) {
-	var resp *http.Response
-	var err error
-
-	switch requestType {
-	case globvar.REQ_GET:
-		resp, err = http.Get(url)
-		break
-	case globvar.REQ_POST:
-		resp, err = http.Post(url, "application/json", bytes.NewBuffer(data))
-		break
-	case globvar.REQ_DELETE:
-		//todo delete
-		break
-	}
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	// Read Response Body
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		return "", errors.New(string(respBody))
-	}
-
-	return string(respBody), nil
 }
 
 func postNewRow(dbname, tableName string, values []string) error {
@@ -189,12 +165,11 @@ func postNewRow(dbname, tableName string, values []string) error {
 		return err
 	}
 
-	err = makeHttpRequest(url, data)
+	_, err = makeHttpRequest(globvar.REQ_POST, url, data)
 
-	// Display Results
-	//fmt.Println("response Status : ", resp.Status)
-	//fmt.Println("response Headers : ", resp.Header)
-	//fmt.Println("response Body : ", string(respBody))
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
