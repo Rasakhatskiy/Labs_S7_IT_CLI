@@ -216,8 +216,7 @@ func setTableValues(table *tview.Table, tableJSON *TableJSON) {
 			if tableJSON.Headers[j].Type == database.TypeCharTS {
 				iv, _ := strconv.Atoi(fmt.Sprintf("%v", data))
 				r := rune(iv)
-				fmt.Println(r)
-				//data = r
+				data = string(r)
 			}
 
 			table.SetCell(i+2, j, tview.NewTableCell(fmt.Sprintf("%v", data)).
@@ -332,6 +331,12 @@ func getTableForm(tableJSON *TableJSON) *tview.Flex {
 			case globvar.Update:
 				offset := 0
 				for i, data := range tableJSON.Values[row-2] {
+					if tableJSON.Headers[i].Type == database.TypeCharTS {
+						iv, _ := strconv.Atoi(fmt.Sprintf("%v", data))
+						r := rune(iv)
+						data = string(r)
+					}
+
 					if tableJSON.Headers[i].Type == database.TypeStringRangeTS {
 						list := reflect.ValueOf(data)
 						inputs[i+offset+0].SetText(fmt.Sprintf("%v", list.Index(0)))
@@ -351,11 +356,14 @@ func getTableForm(tableJSON *TableJSON) *tview.Flex {
 				break
 			case globvar.Delete:
 				globvar.SelectedRow = row - 2
-				err := deleteRow(globvar.DBname, globvar.TableName, row)
+				err := deleteRow(globvar.DBname, globvar.TableName, globvar.SelectedRow)
 				if err != nil {
 					showErrorMessage(flex, nil, "OK", "Exit", err.Error())
 				} else {
-					showInfoMessage(getTableForm(tableJSON), "Successfully deleted")
+					//showInfoMessage(getTableForm(tableJSON), "Successfully deleted")
+					tableJSON, err = getTable(globvar.DBname, globvar.TableName)
+					setTableValues(table, tableJSON)
+					focusOnFlex(getTableForm(tableJSON))
 				}
 				break
 			}
