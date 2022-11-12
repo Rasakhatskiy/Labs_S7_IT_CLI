@@ -6,6 +6,7 @@ var (
 	TableName          string
 	DBname             string
 	TableOperationType int
+	SelectedRow        int
 )
 
 const (

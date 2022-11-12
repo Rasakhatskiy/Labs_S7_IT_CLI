@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"reflect"
 )
 
 func showErrorMessage(firstOptionForm, secondOptionForm *tview.Flex, btnText1, btnText2, message string) {
@@ -229,7 +230,7 @@ func getTableForm(tableJSON *TableJSON) *tview.Flex {
 			err = postNewRow(globvar.DBname, globvar.TableName, values)
 		}
 		if globvar.TableOperationType == globvar.Update {
-			err = postEditRow(globvar.DBname, globvar.TableName, values)
+			err = postEditRow(globvar.DBname, globvar.TableName, values, globvar.SelectedRow)
 		}
 		if err != nil {
 			showErrorMessage(flex, nil, "OK", "Exit", err.Error())
@@ -237,8 +238,8 @@ func getTableForm(tableJSON *TableJSON) *tview.Flex {
 			tableJSON, err = getTable(globvar.DBname, globvar.TableName)
 			if err != nil {
 				showErrorMessage(flex, nil, "OK", "Exit", err.Error())
-				setTableValues(table, tableJSON)
 			}
+			focusOnFlex(getTableForm(tableJSON))
 		}
 	})
 	addEditForm.AddButton("Cancel", func() {
@@ -309,16 +310,31 @@ func getTableForm(tableJSON *TableJSON) *tview.Flex {
 			case globvar.Update:
 				offset := 0
 				for i, data := range tableJSON.Values[row-2] {
-					inputs[i+offset].SetText(fmt.Sprintf("%v", data))
 					if tableJSON.Headers[i].Type == database.TypeStringRangeTS {
+						list := reflect.ValueOf(data)
+						inputs[i+offset+0].SetText(fmt.Sprintf("%v", list.Index(0)))
+						inputs[i+offset+1].SetText(fmt.Sprintf("%v", list.Index(1)))
 						offset++
-						//todo string range
+					} else {
+						inputs[i+offset].SetText(fmt.Sprintf("%v", data))
 					}
+				}
+				globvar.SelectedRow = row - 2
+				addEditForm.Clear(false)
+				for i := range inputs {
+					addEditForm.AddFormItem(inputs[i])
+					app.SetFocus(addEditForm)
 				}
 				app.SetFocus(addEditForm)
 				break
 			case globvar.Delete:
-
+				globvar.SelectedRow = row - 2
+				err := deleteRow(globvar.DBname, globvar.TableName, row)
+				if err != nil {
+					showErrorMessage(flex, nil, "OK", "Exit", err.Error())
+				} else {
+					showInfoMessage(getTableForm(tableJSON), "Successfully deleted")
+				}
 				break
 			}
 

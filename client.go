@@ -23,18 +23,22 @@ func makeHttpRequest(requestType, url string, data []byte) (string, error) {
 	switch requestType {
 	case globvar.REQ_GET:
 		resp, err = http.Get(url)
-		break
+		defer resp.Body.Close()
 	case globvar.REQ_POST:
 		resp, err = http.Post(url, "application/json", bytes.NewBuffer(data))
-		break
+		defer resp.Body.Close()
 	case globvar.REQ_DELETE:
+		req, err := http.NewRequest("DELETE", url, nil)
+		if err != nil {
+			return "", err
+		}
+
+		return "", errors.New("not implemented yet")
 		//todo delete
-		break
 	}
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
 
 	// Read Response Body
 	respBody, err := ioutil.ReadAll(resp.Body)
@@ -174,11 +178,30 @@ func postNewRow(dbname, tableName string, values []string) error {
 	return nil
 }
 
-func postEditRow(dbname, tableName string, values []string) error {
+func postEditRow(dbname, tableName string, values []string, index int) error {
+	url := fmt.Sprintf("%s/databases/%s/%s/%d", getUrl(), dbname, tableName, index)
+	data, err := json.Marshal(values)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = makeHttpRequest(globvar.REQ_POST, url, data)
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func deleteRow(dbname, tableName string, data []interface{}) error {
+func deleteRow(dbname, tableName string, index int) error {
+	url := fmt.Sprintf("%s/databases/%s/%s/%d", getUrl(), dbname, tableName, index)
+	_, err := makeHttpRequest(globvar.REQ_DELETE, url, nil)
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
