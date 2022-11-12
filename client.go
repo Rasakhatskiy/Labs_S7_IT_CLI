@@ -23,18 +23,30 @@ func makeHttpRequest(requestType, url string, data []byte) (string, error) {
 	switch requestType {
 	case globvar.REQ_GET:
 		resp, err = http.Get(url)
+		if err != nil {
+			return "", err
+		}
 		defer resp.Body.Close()
 	case globvar.REQ_POST:
 		resp, err = http.Post(url, "application/json", bytes.NewBuffer(data))
+		if err != nil {
+			return "", err
+		}
 		defer resp.Body.Close()
 	case globvar.REQ_DELETE:
+		client := &http.Client{}
+
 		req, err := http.NewRequest("DELETE", url, nil)
 		if err != nil {
 			return "", err
 		}
 
-		return "", errors.New("not implemented yet")
-		//todo delete
+		resp, err = client.Do(req)
+		if err != nil {
+			fmt.Println(err)
+			return "", err
+		}
+		defer resp.Body.Close()
 	}
 	if err != nil {
 		return "", err

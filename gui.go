@@ -8,6 +8,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"reflect"
+	"strconv"
 )
 
 func showErrorMessage(firstOptionForm, secondOptionForm *tview.Flex, btnText1, btnText2, message string) {
@@ -198,6 +199,27 @@ func setTableValues(table *tview.Table, tableJSON *TableJSON) {
 
 	for i, row := range tableJSON.Values {
 		for j, data := range row {
+
+			if tableJSON.Headers[j].Type == database.TypeStringRangeTS {
+				list := reflect.ValueOf(data)
+				data = fmt.Sprintf("%s\n%s", list.Index(0), list.Index(1))
+			}
+
+			if tableJSON.Headers[j].Type == database.TypeHTMLTS {
+				strData := fmt.Sprintf("%v", data)
+				if len(strData) > 16 {
+					strData = strData[:16] + "..."
+					data = strData
+				}
+			}
+
+			if tableJSON.Headers[j].Type == database.TypeCharTS {
+				iv, _ := strconv.Atoi(fmt.Sprintf("%v", data))
+				r := rune(iv)
+				fmt.Println(r)
+				//data = r
+			}
+
 			table.SetCell(i+2, j, tview.NewTableCell(fmt.Sprintf("%v", data)).
 				SetTextColor(tcell.ColorWhite).
 				SetAlign(tview.AlignCenter))
