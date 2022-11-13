@@ -591,9 +591,54 @@ func getJoinTablesSetupForm() *tview.Flex {
 	return flex
 }
 
+func JoinTables(t1, t2 TableJSON, columnID1, columnID2 int) (*TableJSON, error) {
+	var values [][]interface{}
+	for _, row1 := range t1.Values {
+		for _, row2 := range t2.Values {
+			if row1[columnID1] == row2[columnID2] {
+				tmp := row1
+				row2 = utils.RemoveIndex(row2, columnID2)
+				for _, v := range row2 {
+					tmp = append(tmp, v)
+				}
+				values = append(values, tmp)
+			}
+		}
+
+	}
+	table := TableJSON{
+		Name:    fmt.Sprintf("%s_join_%s", t1.Name, t2.Name),
+		Headers: append(t1.Headers, utils.RemoveIndex(t2.Headers, columnID2)...),
+		Values:  values,
+	}
+	return &table, nil
+}
+
 func getJoinTablesForm(tableJSON1, tableJSON2 *TableJSON, columnID1, columnID2 int) *tview.Flex {
 	// main flex
 	flex := tview.NewFlex()
+
+	newTableJson, err := JoinTables(*tableJSON1, *tableJSON2, columnID1, columnID2)
+
+	if err != nil {
+		showErrorMessage(nil, nil, ":(", ":(", err.Error())
+	}
+
+	table := tview.NewTable()
+	table.
+		Select(0, 0).
+		SetSelectable(true, false).
+		SetFixed(1, 0).
+		SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyEscape {
+				focusOnFlex(getJoinTablesSetupForm())
+			}
+		}).
+		SetBorder(true)
+
+	setTableValues(table, newTableJson)
+
+	flex.AddItem(table, 0, 1, true)
 
 	return flex
 }
