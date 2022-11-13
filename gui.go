@@ -172,6 +172,9 @@ func getTablesListForm() *tview.Flex {
 	for i, s := range list {
 		listForm.AddItem(s, "", rune('a'+i), nil)
 	}
+	listForm.AddItem("Join tables", "", 'j', func() {
+		focusOnFlex(getJoinTablesSetupForm())
+	})
 	listForm.AddItem("Add new table", "", 'n', func() {
 		focusOnFlex(getCreateTableForm())
 	})
@@ -502,6 +505,95 @@ func getCreateDBForm() *tview.Flex {
 		SetTitle("Create DB")
 
 	flex.AddItem(form, 0, 1, true)
+
+	return flex
+}
+
+func setDropDownOptions(dd *tview.DropDown, tableJSON *TableJSON) {
+	for _, header := range tableJSON.Headers {
+		dd.AddOption(fmt.Sprintf("%s :: %s", header.Name, header.Type), nil)
+	}
+}
+
+func getJoinTablesSetupForm() *tview.Flex {
+	// main flex
+	flex := tview.NewFlex()
+
+	// left column flex
+	rowFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+
+	// form with tables
+	formTables := tview.NewForm()
+	ddTable1, ddTable2 := tview.NewDropDown(), tview.NewDropDown()
+
+	// form with columns
+	formColumns := tview.NewForm()
+	ddColumn1, ddColumn2 := tview.NewDropDown(), tview.NewDropDown()
+
+	// get DB tables list
+	list, err := getTablesList(globvar.DBname)
+	if err != nil {
+		showErrorMessage(flex, nil, "Exit", "Cooler Exit", err.Error())
+		return nil
+	}
+
+	var tableJSON1, tableJSON2 *TableJSON
+
+	// form with tables
+	ddTable1.SetLabel("Table 1").SetOptions(list, nil)
+	ddTable2.SetLabel("Table 2").SetOptions(list, nil)
+	formTables.AddFormItem(ddTable1).AddFormItem(ddTable2).
+		AddButton("OK", func() {
+			i1, t1 := ddTable1.GetCurrentOption()
+			i2, t2 := ddTable2.GetCurrentOption()
+
+			if i1 != i2 {
+				tableJSON1, _ = getTable(globvar.DBname, t1)
+				tableJSON2, _ = getTable(globvar.DBname, t2)
+				setDropDownOptions(ddColumn1, tableJSON1)
+				setDropDownOptions(ddColumn2, tableJSON2)
+				app.SetFocus(formColumns)
+			} else {
+				showInfoMessage(rowFlex, "Can't select same table")
+			}
+		}).
+		AddButton("Cancel", func() {
+			focusOnFlex(getTablesListForm())
+		})
+	formTables.SetBorder(true)
+	formTables.SetTitle(" Select tables for join ").SetTitleAlign(tview.AlignLeft)
+
+	// form with columns
+	ddColumn1.SetLabel("Column from table 1")
+	ddColumn2.SetLabel("Column from table 2")
+	formColumns.AddFormItem(ddColumn1).AddFormItem(ddColumn2).
+		AddButton("Join", func() {
+			i1, _ := ddColumn1.GetCurrentOption()
+			i2, _ := ddColumn2.GetCurrentOption()
+
+			if tableJSON1.Headers[i1].Type == tableJSON2.Headers[i2].Type {
+				focusOnFlex(getJoinTablesForm(tableJSON1, tableJSON2, i1, i2))
+			} else {
+				showInfoMessage(rowFlex, "Column types are not the same")
+			}
+		}).
+		AddButton("Back", func() {
+			app.SetFocus(formTables)
+		})
+	formColumns.SetBorder(true)
+	formColumns.SetTitle("Select columns from tables for join")
+
+	rowFlex.AddItem(formTables, 0, 1, true)
+	rowFlex.AddItem(formColumns, 0, 3, true)
+
+	flex.AddItem(rowFlex, 0, 1, true)
+
+	return flex
+}
+
+func getJoinTablesForm(tableJSON1, tableJSON2 *TableJSON, columnID1, columnID2 int) *tview.Flex {
+	// main flex
+	flex := tview.NewFlex()
 
 	return flex
 }
